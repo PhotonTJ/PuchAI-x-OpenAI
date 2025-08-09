@@ -5,8 +5,8 @@ Team BITStoBYTE
 
 ---
 
-## 🎯 Project Overview
-**AI-Powered Phishing Detection MCP Server**
+
+# AI-Powered Phishing Detection MCP Server
 
 We developed an intelligent phishing detection system that combines machine learning with AI APIs through the Model Context Protocol (MCP) framework. Our solution provides real-time URL analysis to protect users from malicious websites and phishing attacks.
 

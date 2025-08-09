@@ -1,0 +1,102 @@
+2025-08-10 02:58:19,422 - __main__ - INFO - ============================================================
+2025-08-10 02:58:19,481 - mcp.server.streamable_http_manager - INFO - StreamableHTTP session manager started
+2025-08-10 03:04:02,481 - mcp.server.streamable_http_manager - INFO - StreamableHTTP session manager shutting down
+2025-08-10 03:20:14,380 - __main__ - INFO - ============================================================
+2025-08-10 03:20:14,423 - mcp.server.streamable_http_manager - INFO - StreamableHTTP session manager started
+2025-08-10 03:23:17,056 - mcp.server.streamable_http_manager - INFO - StreamableHTTP session manager shutting down
+2025-08-10 03:23:20,142 - __main__ - INFO - ============================================================
+2025-08-10 03:23:20,184 - mcp.server.streamable_http_manager - INFO - StreamableHTTP session manager started
+2025-08-10 03:25:00,120 - mcp.server.streamable_http_manager - INFO - StreamableHTTP session manager shutting down
+2025-08-10 03:25:03,174 - __main__ - INFO - ============================================================
+2025-08-10 03:25:03,224 - mcp.server.streamable_http_manager - INFO - StreamableHTTP session manager started
+2025-08-10 03:27:54,188 - mcp.server.streamable_http_manager - INFO - StreamableHTTP session manager shutting down
+2025-08-10 03:27:57,663 - __main__ - INFO - ============================================================
+2025-08-10 03:27:57,709 - mcp.server.streamable_http_manager - INFO - StreamableHTTP session manager started
+2025-08-10 03:34:20,097 - mcp.server.streamable_http_manager - INFO - StreamableHTTP session manager shutting down
+2025-08-10 03:34:25,368 ERROR Error loading artifacts: No module named 'lightgbm'
+Traceback (most recent call last):
+  File "d:\MCP\MCP\try2.py", line 119, in load_models
+    model = pickle.load(f)
+ModuleNotFoundError: No module named 'lightgbm'
+2025-08-10 03:34:36,360 ERROR Error loading artifacts: No module named 'lightgbm'
+Traceback (most recent call last):
+  File "d:\MCP\MCP\try2.py", line 119, in load_models
+    model = pickle.load(f)
+ModuleNotFoundError: No module named 'lightgbm'
+2025-08-10 03:34:57,086 - __main__ - INFO - ============================================================
+2025-08-10 03:34:57,135 - mcp.server.streamable_http_manager - INFO - StreamableHTTP session manager started
+2025-08-10 03:47:07,166 - mcp.server.streamable_http_manager - INFO - StreamableHTTP session manager shutting down
+2025-08-10 03:47:10,308 - __main__ - INFO - ============================================================
+2025-08-10 03:47:10,359 - mcp.server.streamable_http_manager - INFO - StreamableHTTP session manager started
+2025-08-10 03:47:55,236 - mcp.server.streamable_http_manager - INFO - Created new transport with session ID: 905d83c0b268448785f56a314085f8d1
+2025-08-10 03:47:55,679 - mcp.server.lowlevel.server - INFO - Processing request of type ListToolsRequest
+2025-08-10 03:47:55,980 - mcp.server.lowlevel.server - INFO - Processing request of type CallToolRequest
+2025-08-10 03:47:56,199 - mcp.server.streamable_http - INFO - Terminating session: 905d83c0b268448785f56a314085f8d1
+2025-08-10 03:50:38,419 - mcp.server.streamable_http_manager - INFO - Created new transport with session ID: b7e6b6465ab54ed6a56dcd30cf8fed4c
+2025-08-10 03:50:38,831 - mcp.server.lowlevel.server - INFO - Processing request of type ListToolsRequest
+2025-08-10 03:50:43,844 - mcp.server.streamable_http - INFO - Terminating session: b7e6b6465ab54ed6a56dcd30cf8fed4c
+2025-08-10 03:51:48,658 - mcp.server.streamable_http_manager - INFO - Created new transport with session ID: fd44b17bc22a434c81c8f178edc526f6
+2025-08-10 03:51:49,141 - mcp.server.lowlevel.server - INFO - Processing request of type ListToolsRequest
+2025-08-10 03:51:51,819 - mcp.server.lowlevel.server - INFO - Processing request of type CallToolRequest
+2025-08-10 03:51:51,823 - __main__ - WARNING - ML model not available, using fallback score
+2025-08-10 03:51:52,811 - __main__ - WARNING - Using Grok score only (ML model unavailable)
+2025-08-10 03:51:52,811 - __main__ - INFO - User 68e17e5534b3d2d579582cba12ec737f18c99474860b155bfcbe2d4de51957d7: http://test.com -> 0.000 (SAFE)
+2025-08-10 03:51:52,812 - mcp.server.lowlevel.server - INFO - Warning: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+2025-08-10 03:52:03,297 - mcp.server.streamable_http - INFO - Terminating session: fd44b17bc22a434c81c8f178edc526f6
+2025-08-10 03:52:06,000 - mcp.server.streamable_http_manager - INFO - Created new transport with session ID: dd3ccfe4a00544f180aab3ac1ed3efd9
+2025-08-10 03:52:06,572 - mcp.server.lowlevel.server - INFO - Processing request of type ListToolsRequest
+2025-08-10 03:52:17,527 - mcp.server.streamable_http - INFO - Terminating session: dd3ccfe4a00544f180aab3ac1ed3efd9
+2025-08-10 03:52:57,143 - mcp.server.streamable_http_manager - INFO - Created new transport with session ID: a3078aee1a4f4d2c9fee365bbd173c0b
+2025-08-10 03:52:57,656 - mcp.server.lowlevel.server - INFO - Processing request of type ListToolsRequest
+2025-08-10 03:53:00,736 - mcp.server.lowlevel.server - INFO - Processing request of type CallToolRequest
+2025-08-10 03:53:00,747 - __main__ - WARNING - ML model not available, using fallback score
+2025-08-10 03:53:01,527 - __main__ - WARNING - Using Grok score only (ML model unavailable)
+2025-08-10 03:53:01,527 - __main__ - INFO - User 68e17e5534b3d2d579582cba12ec737f18c99474860b155bfcbe2d4de51957d7: http://example.com/?q=free-gift-card-login -> 0.450 (SAFE)
+2025-08-10 03:53:01,528 - mcp.server.lowlevel.server - INFO - Warning: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+2025-08-10 03:53:12,559 - mcp.server.streamable_http - INFO - Terminating session: a3078aee1a4f4d2c9fee365bbd173c0b
+2025-08-10 04:13:15,551 - mcp.server.streamable_http_manager - INFO - Created new transport with session ID: 5da4fa5bf4ba44df9685f9cdf5808015
+2025-08-10 04:13:16,104 - mcp.server.lowlevel.server - INFO - Processing request of type ListToolsRequest
+2025-08-10 04:13:20,414 - mcp.server.streamable_http - INFO - Terminating session: 5da4fa5bf4ba44df9685f9cdf5808015
+2025-08-10 04:13:51,212 - mcp.server.streamable_http_manager - INFO - StreamableHTTP session manager shutting down
+2025-08-10 04:17:52,571 - __main__ - INFO - ============================================================
+2025-08-10 04:17:52,614 - mcp.server.streamable_http_manager - INFO - StreamableHTTP session manager started
+2025-08-10 04:18:58,380 - mcp.server.streamable_http_manager - INFO - Created new transport with session ID: 2b2a52819ad64ae8a7666f2af4fb5ef4
+2025-08-10 04:18:58,893 - mcp.server.lowlevel.server - INFO - Processing request of type ListToolsRequest
+2025-08-10 04:18:59,178 - mcp.server.lowlevel.server - INFO - Processing request of type CallToolRequest
+2025-08-10 04:18:59,390 - mcp.server.streamable_http - INFO - Terminating session: 2b2a52819ad64ae8a7666f2af4fb5ef4
+2025-08-10 04:19:55,049 - mcp.server.streamable_http_manager - INFO - Created new transport with session ID: bc2b1c69b9ae42fbbabaee3cd59e2d27
+2025-08-10 04:19:55,508 - mcp.server.lowlevel.server - INFO - Processing request of type ListToolsRequest
+2025-08-10 04:20:12,774 - mcp.server.streamable_http - INFO - Terminating session: bc2b1c69b9ae42fbbabaee3cd59e2d27
+2025-08-10 04:20:50,489 - mcp.server.streamable_http_manager - INFO - Created new transport with session ID: 38c84f1d12dd4413b34c101a118a344c
+2025-08-10 04:20:50,899 - mcp.server.lowlevel.server - INFO - Processing request of type ListToolsRequest
+2025-08-10 04:21:02,165 - mcp.server.lowlevel.server - INFO - Processing request of type CallToolRequest
+2025-08-10 04:21:02,175 - __main__ - WARNING - ML model not available, using fallback score
+2025-08-10 04:21:03,068 - __main__ - WARNING - Using Grok score only (ML model unavailable)
+2025-08-10 04:21:03,069 - __main__ - INFO - User 68e17e5534b3d2d579582cba12ec737f18c99474860b155bfcbe2d4de51957d7: https://en.wikipedia.org/wiki/Python_(programming_language) -> 0.000 (SAFE)
+2025-08-10 04:21:03,070 - mcp.server.lowlevel.server - INFO - Warning: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+2025-08-10 04:21:06,678 - mcp.server.streamable_http - INFO - Terminating session: 38c84f1d12dd4413b34c101a118a344c
+2025-08-10 04:22:23,630 - mcp.server.streamable_http_manager - INFO - Created new transport with session ID: ea4ac43ebde7404797ebde82c237065a
+2025-08-10 04:22:27,771 - mcp.server.lowlevel.server - INFO - Processing request of type ListToolsRequest
+2025-08-10 04:22:37,568 - mcp.server.lowlevel.server - INFO - Processing request of type CallToolRequest
+2025-08-10 04:22:37,570 - __main__ - WARNING - ML model not available, using fallback score
+2025-08-10 04:22:38,471 - __main__ - WARNING - ML model not available, using fallback score
+2025-08-10 04:22:39,922 - __main__ - WARNING - ML model not available, using fallback score
+2025-08-10 04:22:40,693 - mcp.server.lowlevel.server - INFO - Warning: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+2025-08-10 04:22:44,735 - mcp.server.streamable_http - INFO - Terminating session: ea4ac43ebde7404797ebde82c237065a
+2025-08-10 04:23:16,693 - mcp.server.streamable_http_manager - INFO - Created new transport with session ID: df6765e42f754fd59d12e8c696bef120
+2025-08-10 04:23:17,183 - mcp.server.lowlevel.server - INFO - Processing request of type ListToolsRequest
+2025-08-10 04:23:28,535 - mcp.server.lowlevel.server - INFO - Processing request of type CallToolRequest
+2025-08-10 04:23:28,538 - __main__ - WARNING - ML model not available, using fallback score
+2025-08-10 04:23:29,121 - __main__ - WARNING - Using Grok score only (ML model unavailable)
+2025-08-10 04:23:29,121 - __main__ - INFO - User 68e17e5534b3d2d579582cba12ec737f18c99474860b155bfcbe2d4de51957d7: https://www.eicar.org/download/eicar.com.txt -> 0.000 (SAFE)
+2025-08-10 04:23:29,122 - mcp.server.lowlevel.server - INFO - Warning: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+2025-08-10 04:23:33,820 - mcp.server.streamable_http - INFO - Terminating session: df6765e42f754fd59d12e8c696bef120
+2025-08-10 04:24:50,794 - mcp.server.streamable_http_manager - INFO - Created new transport with session ID: 0a1357ef0b6447a2be34360df7d467fe
+2025-08-10 04:24:51,405 - mcp.server.lowlevel.server - INFO - Processing request of type ListToolsRequest
+2025-08-10 04:24:55,447 - mcp.server.lowlevel.server - INFO - Processing request of type CallToolRequest
+2025-08-10 04:24:55,449 - __main__ - WARNING - ML model not available, using fallback score
+2025-08-10 04:24:56,575 - __main__ - WARNING - Using Grok score only (ML model unavailable)
+2025-08-10 04:24:56,576 - __main__ - INFO - User 68e17e5534b3d2d579582cba12ec737f18c99474860b155bfcbe2d4de51957d7: https://testsafebrowsing.appspot.com/s/malware.html -> 0.000 (SAFE)
+2025-08-10 04:24:56,577 - mcp.server.lowlevel.server - INFO - Warning: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+2025-08-10 04:25:13,805 - mcp.server.streamable_http - INFO - Terminating session: 0a1357ef0b6447a2be34360df7d467fe
+2025-08-10 04:26:44,025 - mcp.server.streamable_http_manager - INFO - StreamableHTTP session manager shutting down

@@ -1,61 +1,64 @@
 import asyncio
 import os
-import requests
 import pickle
 import re
 import logging
 import json
 from datetime import datetime
-from typing import Annotated, Optional
+from typing import Annotated, Optional, Tuple
 from urllib.parse import urlparse
 import validators
 from dotenv import load_dotenv
+import httpx
+import uvicorn
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
+# FastMCP imports
 from fastmcp import FastMCP
-from fastmcp.server.auth.providers.bearer import BearerAuthProvider, RSAKeyPair
-from mcp.server.auth.provider import AccessToken
-from mcp import ErrorData, McpError
-from mcp.types import TextContent, INVALID_PARAMS, INTERNAL_ERROR
-from pydantic import Field, BaseModel
+from pydantic import Field, BaseModel, field_validator
 
 # --- Configure Logging ---
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler('phishing_mcp_server.log'),
+        logging.FileHandler('phishing_server.log'),
         logging.StreamHandler()
     ]
 )
 logger = logging.getLogger(__name__)
 
 # --- Environment Configuration ---
+
+
 TOKEN = "superrandomstring"  # Change this to something random!
 MY_NUMBER = "917498124973"  # Your WhatsApp number for Puch AI validation
 
 # Optional Settings
 DEFAULT_LAMBDA = 0.6  # Weight for ML vs Grok (0.6 = 60% Grok, 40% ML)
-MODEL_PATH = ""  # Path to your trained model
-VECTORIZER_PATH = ""  # Path to your vectorizer
+MODEL_PATH = "phishing_mcp_server.log"  # Path to your trained model
+VECTORIZER_PATH = "tfidf_vectorizer.pkl"  # Path to your vectorizer
 
 # Grok AI Settings (Optional - leave empty if you don't have Grok API)
 GROK_API_URL = ""  # Example: "https://api.x.ai/v1/chat/completions"
 GROK_API_KEY = ""  # Your Grok API key
 
+# Server configuration
+HOST = os.getenv("HOST", "0.0.0.0")
+PORT = int(os.getenv("PORT", "8000"))
+MCP_PORT = int(os.getenv("MCP_PORT", "8001"))
 
-# Validation
-if not TOKEN or TOKEN == "phishing_detector_2024_super_secure_token_xyz123456789":
-    print("⚠️  WARNING: Please change TOKEN to a secure random value!")
-
-if not MY_NUMBER or MY_NUMBER == "+1234567890":
-    print("⚠️  WARNING: Please set MY_NUMBER to your actual WhatsApp number!")
-
-assert TOKEN, "TOKEN is required"
-assert MY_NUMBER, "MY_NUMBER is required"
+# Constants
+PHISHING_THRESHOLD = 0.5
+HIGH_RISK_THRESHOLD = 0.8
+MEDIUM_RISK_THRESHOLD = 0.6
+MAX_BATCH_SIZE = 10
 
 logger.info("✅ Configuration loaded successfully")
 
-# Global variables for model
+# Global variables
 model = None
 vectorizer = None
 server_stats = {
@@ -63,38 +66,27 @@ server_stats = {
     "total_predictions": 0,
     "phishing_detected": 0,
     "errors": 0,
-    "user_requests": {}  # Track requests per user
+    "user_requests": {}
 }
 
-# --- Auth Provider (same pattern as your sample) ---
-class SimpleBearerAuthProvider(BearerAuthProvider):
-    """
-    A simple BearerAuthProvider that does not require any specific configuration.
-    It allows any valid bearer token to access the MCP server.
-    """
+# --- Initialize FastAPI App ---
+app = FastAPI(
+    title="Phishing Detection API",
+    description="API for detecting phishing websites",
+    version="1.0.0"
+)
 
-    def __init__(self, token: str):
-        k = RSAKeyPair.generate()
-        super().__init__(
-            public_key=k.public_key, jwks_uri=None, issuer=None, audience=None
-        )
-        self.token = token
-
-    async def load_access_token(self, token: str) -> AccessToken | None:
-        if token == self.token:
-            return AccessToken(
-                token=token,
-                client_id="phishing-client",
-                scopes=["*"],
-                expires_at=None,
-            )
-        return None
+# Add CORS middleware for frontend
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # In production, specify your frontend URL
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # --- Initialize MCP Server ---
-mcp = FastMCP(
-    "Phishing Detection MCP Server",
-    auth=SimpleBearerAuthProvider(TOKEN),
-)
+mcp = FastMCP("Phishing Detection MCP Server")
 
 # --- Load Models ---
 def load_models():
@@ -126,21 +118,11 @@ def load_models():
         model = None
         vectorizer = None
 
-# Load models on startup
 load_models()
-
-# --- Rich Tool Description Models ---
-class RichToolDescription(BaseModel):
-    description: str
-    use_when: str
-    side_effects: str | None = None
 
 # --- Utility Functions ---
 def _now() -> str:
     return datetime.utcnow().isoformat()
-
-def _error(code, msg):
-    raise McpError(ErrorData(code=code, message=msg))
 
 def get_confidence_level(score: float) -> str:
     """Determine confidence level based on score"""
@@ -173,16 +155,15 @@ def validate_url(url: str) -> bool:
         if validators.url(url) or validators.domain(url):
             return True
             
-        # Try adding protocol if missing
         if not url.startswith(('http://', 'https://')):
             test_url = f"https://{url}"
             return validators.url(test_url)
             
         return False
-    except:
+    except Exception:
         return False
 
-def ml_model_score(url: str) -> tuple[float, bool]:
+def ml_model_score(url: str) -> Tuple[float, bool]:
     """Get phishing probability from ML model"""
     try:
         if not model or not vectorizer:
@@ -199,16 +180,15 @@ def ml_model_score(url: str) -> tuple[float, bool]:
         logger.error(f"ML model prediction error: {e}")
         return 0.5, False
 
-def grok_score(url: str, timeout: int = 10) -> tuple[float, bool]:
+async def groq_score(url: str, timeout: int = 10) -> Tuple[float, bool]:
     """Get phishing probability from Groq API"""
     try:
-        if not GROK_API_URL or not GROK_API_KEY:
+        if not GROQ_API_URL or not GROQ_API_KEY:
             logger.warning("Groq API not configured, using fallback score")
             return 0.5, False
         
-        # Groq uses OpenAI-compatible chat completions format
         payload = {
-            "model": "llama-3.1-8b-instant",  # or another supported model
+            "model": "llama-3.1-8b-instant",
             "messages": [
                 {
                     "role": "system",
@@ -224,372 +204,315 @@ def grok_score(url: str, timeout: int = 10) -> tuple[float, bool]:
         }
         
         headers = {
-            "Authorization": f"Bearer {GROK_API_KEY}",
+            "Authorization": f"Bearer {GROQ_API_KEY}",
             "Content-Type": "application/json"
         }
         
-        response = requests.post(
-            GROK_API_URL, 
-            json=payload, 
-            headers=headers, 
-            timeout=timeout
-        )
-        response.raise_for_status()
-        
-        # Parse Groq's response format
-        response_data = response.json()
-        output_text = response_data.get("choices", [{}])[0].get("message", {}).get("content", "0.5").strip()
-        
-        # Extract numeric value from response
-        score_match = re.search(r"0?\.\d+|[01]\.?\d*", output_text)
-        if score_match:
-            score = float(score_match.group())
-            return max(0.0, min(1.0, score)), True
-        else:
-            return 0.5, False
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                GROQ_API_URL, 
+                json=payload, 
+                headers=headers, 
+                timeout=timeout
+            )
+            response.raise_for_status()
             
-    except requests.RequestException as e:
+            response_data = response.json()
+            output_text = response_data.get("choices", [{}])[0].get("message", {}).get("content", "0.5").strip()
+            
+            score_match = re.search(r"0?\.\d+|[01]\.?\d*", output_text)
+            if score_match:
+                score = float(score_match.group())
+                return max(0.0, min(1.0, score)), True
+            else:
+                return 0.5, False
+                
+    except httpx.RequestError as e:
         logger.error(f"Groq API request error: {e}")
         return 0.5, False
     except Exception as e:
         logger.error(f"Groq API unexpected error: {e}")
         return 0.5, False
 
-def update_user_stats(puch_user_id: str, is_phishing: bool):
+def update_user_stats(user_id: str, is_phishing: bool):
     """Update statistics for user and global"""
     server_stats["total_predictions"] += 1
     if is_phishing:
         server_stats["phishing_detected"] += 1
     
-    # Track per user
-    if puch_user_id not in server_stats["user_requests"]:
-        server_stats["user_requests"][puch_user_id] = {
+    if user_id not in server_stats["user_requests"]:
+        server_stats["user_requests"][user_id] = {
             "total": 0,
             "phishing_found": 0,
             "first_request": _now(),
             "last_request": _now()
         }
     
-    user_stats = server_stats["user_requests"][puch_user_id]
+    user_stats = server_stats["user_requests"][user_id]
     user_stats["total"] += 1
     if is_phishing:
         user_stats["phishing_found"] += 1
     user_stats["last_request"] = _now()
 
-# --- Tool Descriptions ---
-VALIDATE_DESCRIPTION = RichToolDescription(
-    description="Validate the MCP server and return the configured number.",
-    use_when="Required by Puch AI for server validation.",
-    side_effects=None,
-)
-
-ANALYZE_URL_DESCRIPTION = RichToolDescription(
-    description="Analyze a URL for phishing threats using ML model and Grok AI.",
-    use_when="When a user provides a URL to check for phishing, suspicious links, or wants to verify if a website is safe.",
-    side_effects="Records the analysis in server statistics and user request history."
-)
-
-BATCH_ANALYZE_DESCRIPTION = RichToolDescription(
-    description="Analyze multiple URLs at once for phishing threats (up to 10 URLs).",
-    use_when="When a user provides multiple URLs to check simultaneously.",
-    side_effects="Records all analyses in server statistics."
-)
-
-GET_STATS_DESCRIPTION = RichToolDescription(
-    description="Get phishing detection statistics for a specific user.",
-    use_when="When a user asks about their usage statistics, previous checks, or wants to see their phishing detection history.",
-    side_effects=None,
-)
-
-# --- MCP Tools ---
-@mcp.tool(description=VALIDATE_DESCRIPTION.model_dump_json())
-async def validate() -> str:
-    """Required validation tool for Puch AI"""
-    return MY_NUMBER
-
-@mcp.tool(description=ANALYZE_URL_DESCRIPTION.model_dump_json())
-async def analyze_url(
-    puch_user_id: Annotated[str, Field(description="Puch User Unique Identifier")],
-    url: Annotated[str, Field(description="URL to analyze for phishing")],
-    lambda_override: Annotated[Optional[float], Field(description="Custom lambda value (0-1) for ML/Grok weighting")] = None,
-) -> list[TextContent]:
-    """Analyze a single URL for phishing threats"""
+async def analyze_url_core(url: str, user_id: str = "api_user", lambda_override: Optional[float] = None):
+    """Core analysis function used by both MCP and FastAPI"""
     try:
         start_time = datetime.now()
         
-        # Validate inputs
-        if not puch_user_id:
-            _error(INVALID_PARAMS, "puch_user_id is required")
-        
-        if not url or not url.strip():
-            _error(INVALID_PARAMS, "URL cannot be empty")
-        
         if not validate_url(url):
-            _error(INVALID_PARAMS, "Invalid URL format")
+            return {"error": "Invalid URL format", "success": False}
         
-        if lambda_override is not None and not (0 <= lambda_override <= 1):
-            _error(INVALID_PARAMS, "Lambda must be between 0 and 1")
-        
-        # Use custom lambda if provided
         lambda_val = lambda_override if lambda_override is not None else DEFAULT_LAMBDA
         
-        # Get predictions from both models
+        # Get predictions
         ml_score, ml_success = ml_model_score(url)
-        grok_score_val, grok_success = grok_score(url)
+        groq_score_val, groq_success = await groq_score(url)
         
-        # Calculate final score with weighted average
-        if ml_success and grok_success:
-            final_score = lambda_val * grok_score_val + (1 - lambda_val) * ml_score
+        # Calculate final score
+        if ml_success and groq_success:
+            final_score = lambda_val * groq_score_val + (1 - lambda_val) * ml_score
         elif ml_success:
             final_score = ml_score
-            logger.warning("Using ML score only (Grok unavailable)")
-        elif grok_success:
-            final_score = grok_score_val
-            logger.warning("Using Grok score only (ML model unavailable)")
+        elif groq_success:
+            final_score = groq_score_val
         else:
             final_score = 0.5
-            logger.warning("Both models unavailable, using neutral score")
         
-        # Ensure score is in valid range
         final_score = max(0.0, min(1.0, final_score))
-        
-        is_phishing = final_score > 0.5
+        is_phishing = final_score > PHISHING_THRESHOLD
         confidence = get_confidence_level(final_score)
-        
-        # Calculate processing time
         processing_time = (datetime.now() - start_time).total_seconds() * 1000
         
-        # Update statistics
-        update_user_stats(puch_user_id, is_phishing)
+        # Update stats
+        update_user_stats(user_id, is_phishing)
         
-        # Log prediction
-        logger.info(f"User {puch_user_id}: {url} -> {final_score:.3f} ({'PHISHING' if is_phishing else 'SAFE'})")
+        # Log
+        logger.info(f"User {user_id}: {url} -> {final_score:.3f} ({'PHISHING' if is_phishing else 'SAFE'})")
         
-        # Create detailed response
-        result = {
+        return {
+            "success": True,
             "url": url,
-            "analysis": {
-                "is_phishing": is_phishing,
-                "risk_level": "HIGH" if final_score >= 0.8 else "MEDIUM" if final_score >= 0.6 else "LOW",
-                "confidence": confidence,
-                "final_score": round(final_score, 4)
-            },
+            "is_phishing": is_phishing,
+            "risk_level": "HIGH" if final_score >= HIGH_RISK_THRESHOLD else "MEDIUM" if final_score >= MEDIUM_RISK_THRESHOLD else "LOW",
+            "confidence": confidence,
+            "final_score": round(final_score, 4),
             "model_scores": {
-                "ml_model": round(ml_score, 4) if ml_success else "unavailable",
-                "grok_ai": round(grok_score_val, 4) if grok_success else "unavailable",
-                "lambda_weight": lambda_val
+                "ml_model": round(ml_score, 4) if ml_success else None,
+                "groq_ai": round(groq_score_val, 4) if groq_success else None,
             },
             "metadata": {
                 "processing_time_ms": round(processing_time, 2),
                 "timestamp": _now(),
                 "models_used": {
                     "ml_model": ml_success,
-                    "grok_ai": grok_success
+                    "groq_ai": groq_success
                 }
             }
         }
         
-        # Create user-friendly summary
-        if is_phishing:
-            summary = f"🚨 **PHISHING DETECTED** 🚨\n"
-            summary += f"URL: {url}\n"
-            summary += f"Risk Level: {result['analysis']['risk_level']}\n"
-            summary += f"Confidence: {confidence.title()}\n"
-            summary += f"Score: {final_score:.2f}/1.0\n\n"
-            summary += "⚠️ **DO NOT VISIT THIS LINK** - It appears to be malicious!"
-        else:
-            summary = f"✅ **URL APPEARS SAFE** ✅\n"
-            summary += f"URL: {url}\n"
-            summary += f"Risk Level: {result['analysis']['risk_level']}\n"
-            summary += f"Confidence: {confidence.title()}\n"
-            summary += f"Score: {final_score:.2f}/1.0\n\n"
-            summary += "This link appears to be legitimate, but always exercise caution online."
-        
-        return [
-            TextContent(type="text", text=summary),
-            TextContent(type="text", text=f"Detailed Analysis: {json.dumps(result, indent=2)}")
-        ]
-        
-    except McpError:
-        raise
     except Exception as e:
         server_stats["errors"] += 1
-        logger.error(f"Analysis error for user {puch_user_id}, URL {url}: {e}")
-        _error(INTERNAL_ERROR, f"Analysis failed: {str(e)}")
+        logger.error(f"Analysis error: {e}")
+        return {"error": str(e), "success": False}
 
-@mcp.tool(description=BATCH_ANALYZE_DESCRIPTION.model_dump_json())
-async def batch_analyze_urls(
-    puch_user_id: Annotated[str, Field(description="Puch User Unique Identifier")],
-    urls: Annotated[list[str], Field(description="List of URLs to analyze (max 10)")],
-) -> list[TextContent]:
-    """Analyze multiple URLs for phishing threats"""
+# --- FastAPI Endpoints ---
+
+class AnalyzeRequest(BaseModel):
+    url: str
+    user_id: Optional[str] = "web_user"
+    lambda_override: Optional[float] = None
+
+    @field_validator("url")
+    @classmethod
+    def normalize_url(cls, v):
+        v = v.strip()
+        if not v:
+            raise ValueError("URL cannot be empty")
+        if not re.match(r"^https?://", v):
+            v = "https://" + v
+        return v
+
+class BatchAnalyzeRequest(BaseModel):
+    urls: list[str]
+    user_id: Optional[str] = "web_user"
+
+@app.get("/")
+async def root():
+    """Root endpoint with API information"""
+    return {
+        "message": "🔒 Phishing Detection API",
+        "version": "1.0.0",
+        "endpoints": {
+            "analyze": "POST /analyze - Analyze single URL",
+            "batch": "POST /batch-analyze - Analyze multiple URLs",
+            "stats": "GET /stats/{user_id} - Get user statistics",
+            "health": "GET /health - Server health check"
+        },
+        "mcp_server": f"MCP server running on port {MCP_PORT}",
+        "docs": "/docs"
+    }
+
+@app.post("/analyze")
+async def analyze_website(request: AnalyzeRequest):
+    """Analyze a single website for phishing - Main endpoint for frontend"""
     try:
-        if not puch_user_id:
-            _error(INVALID_PARAMS, "puch_user_id is required")
+        result = await analyze_url_core(
+            url=request.url,
+            user_id=request.user_id,
+            lambda_override=request.lambda_override
+        )
         
-        if not urls or len(urls) == 0:
-            _error(INVALID_PARAMS, "URLs list cannot be empty")
+        if not result["success"]:
+            raise HTTPException(status_code=400, detail=result["error"])
         
-        if len(urls) > 10:
-            _error(INVALID_PARAMS, "Maximum 10 URLs allowed per batch")
+        # Format response like WhatsApp bot
+        if result["is_phishing"]:
+            message = f"🚨 **PHISHING DETECTED** 🚨\n\n"
+            message += f"🌐 **URL:** {result['url']}\n"
+            message += f"⚠️ **Risk Level:** {result['risk_level']}\n"
+            message += f"🎯 **Confidence:** {result['confidence'].title()}\n"
+            message += f"📊 **Score:** {result['final_score']}/1.0\n\n"
+            message += f"❌ **DO NOT VISIT THIS LINK** - It appears to be malicious!\n\n"
+            message += f"🛡️ **Stay Safe:** Never enter personal information on suspicious sites."
+        else:
+            message = f"✅ **URL APPEARS SAFE** ✅\n\n"
+            message += f"🌐 **URL:** {result['url']}\n"
+            message += f"✅ **Risk Level:** {result['risk_level']}\n"
+            message += f"🎯 **Confidence:** {result['confidence'].title()}\n"
+            message += f"📊 **Score:** {result['final_score']}/1.0\n\n"
+            message += f"✅ **This link appears legitimate**, but always exercise caution online.\n\n"
+            message += f"💡 **Tip:** Always verify the URL matches the expected website."
+
+        return {
+            "success": True,
+            "message": message,
+            "data": result,
+            "whatsapp_format": True
+        }
+        
+    except Exception as e:
+        logger.error(f"API analysis error: {e}")
+        raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)}")
+
+@app.post("/batch-analyze")
+async def batch_analyze(request: BatchAnalyzeRequest):
+    """Analyze multiple URLs"""
+    try:
+        if len(request.urls) > MAX_BATCH_SIZE:
+            raise HTTPException(status_code=400, detail=f"Maximum {MAX_BATCH_SIZE} URLs allowed")
         
         results = []
         phishing_count = 0
         
-        for i, url in enumerate(urls, 1):
-            try:
-                if not validate_url(url):
-                    results.append({
-                        "url": url,
-                        "error": "Invalid URL format",
-                        "is_phishing": None
-                    })
-                    continue
-                
-                # Get predictions
-                ml_score, ml_success = ml_model_score(url)
-                grok_score_val, grok_success = grok_score(url)
-                
-                # Calculate final score
-                if ml_success and grok_success:
-                    final_score = DEFAULT_LAMBDA * grok_score_val + (1 - DEFAULT_LAMBDA) * ml_score
-                elif ml_success:
-                    final_score = ml_score
-                elif grok_success:
-                    final_score = grok_score_val
-                else:
-                    final_score = 0.5
-                
-                final_score = max(0.0, min(1.0, final_score))
-                is_phishing = final_score > 0.5
-                
-                if is_phishing:
-                    phishing_count += 1
-                
-                results.append({
-                    "url": url,
-                    "is_phishing": is_phishing,
-                    "final_score": round(final_score, 4),
-                    "risk_level": "HIGH" if final_score >= 0.8 else "MEDIUM" if final_score >= 0.6 else "LOW"
-                })
-                
-                # Update stats
-                update_user_stats(puch_user_id, is_phishing)
-                
-            except Exception as e:
-                results.append({
-                    "url": url,
-                    "error": str(e),
-                    "is_phishing": None
-                })
+        for url in request.urls:
+            result = await analyze_url_core(url, request.user_id)
+            results.append(result)
+            if result.get("success") and result.get("is_phishing"):
+                phishing_count += 1
         
-        # Create summary
-        total = len(urls)
-        safe_count = sum(1 for r in results if r.get("is_phishing") is False)
-        
-        summary = f"📊 **BATCH ANALYSIS COMPLETE** 📊\n"
-        summary += f"Total URLs: {total}\n"
-        summary += f"🚨 Phishing Detected: {phishing_count}\n"
-        summary += f"✅ Safe URLs: {safe_count}\n"
-        summary += f"❌ Errors: {total - phishing_count - safe_count}\n\n"
-        
-        if phishing_count > 0:
-            summary += "⚠️ **PHISHING URLS FOUND - AVOID THESE LINKS:**\n"
-            for r in results:
-                if r.get("is_phishing"):
-                    summary += f"🚨 {r['url']} (Score: {r['final_score']})\n"
-        
-        return [
-            TextContent(type="text", text=summary),
-            TextContent(type="text", text=f"Detailed Results: {json.dumps(results, indent=2)}")
-        ]
-        
-    except McpError:
-        raise
-    except Exception as e:
-        server_stats["errors"] += 1
-        logger.error(f"Batch analysis error for user {puch_user_id}: {e}")
-        _error(INTERNAL_ERROR, f"Batch analysis failed: {str(e)}")
-
-@mcp.tool(description=GET_STATS_DESCRIPTION.model_dump_json())
-async def get_user_stats(
-    puch_user_id: Annotated[str, Field(description="Puch User Unique Identifier")],
-) -> list[TextContent]:
-    """Get phishing detection statistics for a user"""
-    try:
-        if not puch_user_id:
-            _error(INVALID_PARAMS, "puch_user_id is required")
-        
-        # Get user stats
-        user_stats = server_stats["user_requests"].get(puch_user_id, {
-            "total": 0,
-            "phishing_found": 0,
-            "first_request": "Never",
-            "last_request": "Never"
-        })
-        
-        # Calculate uptime
-        uptime = (datetime.now() - server_stats["startup_time"]).total_seconds()
-        uptime_hours = uptime / 3600
-        
-        # Create user-friendly summary
-        if user_stats["total"] == 0:
-            summary = f"📊 **YOUR PHISHING DETECTION STATS** 📊\n"
-            summary += f"You haven't made any URL checks yet!\n"
-            summary += f"Send me a URL to analyze and I'll check if it's safe or malicious."
-        else:
-            phishing_rate = (user_stats["phishing_found"] / user_stats["total"]) * 100
-            
-            summary = f"📊 **YOUR PHISHING DETECTION STATS** 📊\n"
-            summary += f"Total URLs Checked: {user_stats['total']}\n"
-            summary += f"🚨 Phishing Detected: {user_stats['phishing_found']}\n"
-            summary += f"✅ Safe URLs: {user_stats['total'] - user_stats['phishing_found']}\n"
-            summary += f"📈 Phishing Rate: {phishing_rate:.1f}%\n"
-            summary += f"📅 First Check: {user_stats['first_request']}\n"
-            summary += f"🕐 Last Check: {user_stats['last_request']}\n"
-        
-        # Server stats
-        global_phishing_rate = (server_stats["phishing_detected"] / max(server_stats["total_predictions"], 1)) * 100
-        
-        detailed_stats = {
-            "user_stats": user_stats,
-            "server_stats": {
-                "total_predictions": server_stats["total_predictions"],
-                "phishing_detected": server_stats["phishing_detected"],
-                "errors": server_stats["errors"],
-                "uptime_hours": round(uptime_hours, 2),
-                "global_phishing_rate": round(global_phishing_rate, 2)
-            }
+        return {
+            "success": True,
+            "total_urls": len(request.urls),
+            "phishing_detected": phishing_count,
+            "safe_urls": len(request.urls) - phishing_count,
+            "results": results
         }
         
-        return [
-            TextContent(type="text", text=summary),
-            TextContent(type="text", text=f"Detailed Stats: {json.dumps(detailed_stats, indent=2)}")
-        ]
-        
-    except McpError:
-        raise
     except Exception as e:
-        logger.error(f"Stats error for user {puch_user_id}: {e}")
-        _error(INTERNAL_ERROR, f"Failed to get stats: {str(e)}")
+        logger.error(f"Batch analysis error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
-# --- Main ---
+@app.get("/stats/{user_id}")
+async def get_user_stats(user_id: str):
+    """Get statistics for a user"""
+    user_stats = server_stats["user_requests"].get(user_id)
+    if not user_stats:
+        return {"message": f"No statistics found for user: {user_id}"}
+    return user_stats
+
+@app.get("/health")
+async def health_check():
+    """Server health check"""
+    return {
+        "status": "healthy",
+        "timestamp": _now(),
+        "models": {
+            "ml_model": model is not None,
+            "vectorizer": vectorizer is not None,
+            "groq_api": GROQ_API_KEY is not None
+        },
+        "stats": {
+            "total_predictions": server_stats["total_predictions"],
+            "phishing_detected": server_stats["phishing_detected"],
+            "uptime": str(datetime.now() - server_stats["startup_time"])
+        }
+    }
+
+# --- MCP Tools (same as before) ---
+@mcp.tool
+def validate() -> str:
+    """Required validation tool for Puch AI"""
+    return MY_NUMBER
+
+@mcp.tool
+async def analyze_url_mcp(
+    puch_user_id: Annotated[str, Field(description="Puch User Unique Identifier")],
+    url: Annotated[str, Field(description="URL to analyze for phishing")],
+    lambda_override: Annotated[Optional[float], Field(description="Custom lambda value (0-1)")] = None,
+) -> str:
+    """Analyze a single URL for phishing threats (MCP version)"""
+    result = await analyze_url_core(url, puch_user_id, lambda_override)
+    
+    if not result["success"]:
+        return f"❌ Error: {result['error']}"
+    
+    if result["is_phishing"]:
+        summary = f"🚨 **PHISHING DETECTED** 🚨\n"
+        summary += f"URL: {result['url']}\n"
+        summary += f"Risk Level: {result['risk_level']}\n"
+        summary += f"Score: {result['final_score']}/1.0\n"
+        summary += "⚠️ **DO NOT VISIT THIS LINK**"
+    else:
+        summary = f"✅ **URL APPEARS SAFE** ✅\n"
+        summary += f"URL: {result['url']}\n"
+        summary += f"Risk Level: {result['risk_level']}\n"
+        summary += f"Score: {result['final_score']}/1.0"
+    
+    return summary
+
+@mcp.tool
+def get_stats_mcp(
+    puch_user_id: Annotated[str, Field(description="Puch User Unique Identifier")]
+) -> str:
+    """Return statistics for a specific user (MCP version)"""
+    user_stats = server_stats["user_requests"].get(puch_user_id)
+    if not user_stats:
+        return f"📊 No statistics found for user: {puch_user_id}"
+    
+    return f"📊 **USER STATISTICS** 📊\n{json.dumps(user_stats, indent=2)}"
+
+# --- Server Runner ---
+def run_mcp_server():
+    """Run MCP server in background"""
+    logger.info(f"🚀 Starting MCP Server on port {MCP_PORT}...")
+    mcp.run(transport="stdio")
+
 async def main():
-    try:
-        logger.info("🚀 Starting Phishing Detection MCP Server...")
-        logger.info(f"🤖 ML Model: {'Loaded' if model and vectorizer else 'Missing'}")
-        logger.info(f"🧠 Grok API: {'Configured' if GROK_API_URL and GROK_API_KEY else 'Not Configured'}")
-        logger.info(f"🌐 Server will run on: http://0.0.0.0:8086")
-        logger.info("📡 To expose publicly, run: ngrok http 8086")
-        logger.info("🔗 Then use the ngrok URL in Puch AI configuration")
-        logger.info("=" * 60)
-        
-        await mcp.run_async("streamable-http", host="0.0.0.0", port=8086)
-        
-    except Exception as e:
-        logger.error(f"❌ Server failed to start: {e}")
-        import traceback
-        traceback.print_exc()
+    """Main function to run both servers"""
+    logger.info("🚀 Starting Combined Phishing Detection Server...")
+    logger.info(f"📡 FastAPI Server: http://{HOST}:{PORT}")
+    logger.info(f"🔌 MCP Server: Available for MCP clients")
+    logger.info("🌐 API Documentation: http://localhost:8000/docs")
+    
+    # Run FastAPI server
+    config = uvicorn.Config(
+        app,
+        host=HOST,
+        port=PORT,
+        log_level="info"
+    )
+    server = uvicorn.Server(config)
+    await server.serve()
 
 if __name__ == "__main__":
     asyncio.run(main())

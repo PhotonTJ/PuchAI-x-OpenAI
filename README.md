@@ -317,4 +317,4 @@ Output (Phishing / Legitimate)
 - **Output:** The script outputs whether the input URL is phishing or legitimate.
 
 
-**Team BitsToBYTE: Protecting your digital life with AI that cares.**
+
